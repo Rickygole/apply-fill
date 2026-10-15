@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Apply Fill",
+  "version": "0.1.0",
+  "description": "Fills job application forms from a saved profile. Never submits.",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Apply Fill" },
+  "options_page": "options.html",
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "commands": {
+    "fill": {
+      "suggested_key": { "default": "Alt+Shift+F", "mac": "Alt+Shift+F" },
+      "description": "Fill the current page"
+    }
+  }
+}
