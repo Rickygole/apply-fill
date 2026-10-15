@@ -2,7 +2,7 @@ const SECTIONS = [
   ["Identity", [
     ["first_name", "First name"], ["last_name", "Last name"],
     ["full_name", "Full name"], ["preferred_name", "Preferred name"],
-    ["email", "Email"], ["phone", "Phone"], ["pronouns", "Pronouns"],
+    ["email", "Email"], ["phone", "Phone"], ["phone_type", "Phone type (e.g. Mobile)"], ["pronouns", "Pronouns"],
   ]],
   ["Address", [
     ["address_line1", "Street", "wide"], ["address_line2", "Line 2", "wide"],
@@ -27,6 +27,13 @@ const SECTIONS = [
     ["relocate", "Willing to relocate", "", "bool"],
     ["restriction", "Bound by a non-compete", "", "bool"],
     ["previously_employed", "Previously worked at the company", "", "bool"],
+    ["student", "Currently a student", "", "bool"],
+    ["terminated", "Ever terminated or asked to resign", "", "bool"],
+    ["relatives_at_company", "Relatives work at the company", "", "bool"],
+  ]],
+  ["Work experience and education", [
+    ["experience", "Work experience, newest first: [{title, company, location, from: \"MM/YYYY\", to, current, description}]", "wide", "json"],
+    ["education", "Education: [{school, degree, field, gpa, from: \"YYYY\", to}]", "wide", "json"],
   ]],
   ["Voluntary self-ID", [
     ["gender", "Gender"], ["race", "Race / ethnicity"],
@@ -57,8 +64,9 @@ for (const [title, fields] of SECTIONS) {
       input.type = "checkbox";
       label.append(input, text);
     } else {
-      input = document.createElement(kind === "area" ? "textarea" : "input");
-      if (kind !== "area") input.type = "text";
+      input = document.createElement(kind === "area" || kind === "json" ? "textarea" : "input");
+      if (kind === "json") { input.dataset.json = "1"; input.style.minHeight = "160px"; input.style.fontFamily = "ui-monospace, monospace"; input.style.fontSize = "12px"; }
+      else if (kind !== "area") input.type = "text";
       label.append(text, input);
     }
     input.name = key;
@@ -69,7 +77,12 @@ for (const [title, fields] of SECTIONS) {
 
 function readForm() {
   const p = {};
-  for (const el of form.elements) p[el.name] = el.type === "checkbox" ? el.checked : el.value.trim();
+  for (const el of form.elements) {
+    if (el.dataset.json) {
+      const t = el.value.trim();
+      p[el.name] = t ? JSON.parse(t) : [];
+    } else p[el.name] = el.type === "checkbox" ? el.checked : el.value.trim();
+  }
   return p;
 }
 
@@ -77,6 +90,7 @@ function writeForm(p) {
   for (const el of form.elements) {
     if (!(el.name in p)) continue;
     if (el.type === "checkbox") el.checked = !!p[el.name];
+    else if (el.dataset.json) el.value = p[el.name] && p[el.name].length ? JSON.stringify(p[el.name], null, 2) : "";
     else el.value = p[el.name] ?? "";
   }
 }
@@ -112,7 +126,9 @@ document.getElementById("resumeFile").onchange = (e) => {
 };
 
 document.getElementById("save").onclick = async () => {
-  await chrome.storage.local.set({ profile: readForm(), resume });
+  let profile;
+  try { profile = readForm(); } catch { flash("Experience or education is not valid JSON."); return; }
+  await chrome.storage.local.set({ profile, resume });
   flash("Saved");
 };
 
@@ -133,7 +149,9 @@ document.getElementById("importFile").onchange = async (e) => {
 };
 
 document.getElementById("export").onclick = () => {
-  const blob = new Blob([JSON.stringify({ profile: readForm(), resume }, null, 2)], { type: "application/json" });
+  let profile;
+  try { profile = readForm(); } catch { flash("Experience or education is not valid JSON."); return; }
+  const blob = new Blob([JSON.stringify({ profile, resume }, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "apply-fill-profile.json";

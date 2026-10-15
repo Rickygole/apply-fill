@@ -4,15 +4,22 @@
 
   const BOOL_KEYS = new Set([
     "authorized_us", "requires_sponsorship", "hispanic_latino", "restriction",
-    "over_18", "relocate", "previously_employed",
+    "over_18", "relocate", "previously_employed", "under_18", "terminated",
+    "relatives_at_company", "current_company_employee", "enrolled_at_company", "student",
   ]);
 
   const SCREENER = [
+    [/\bminor\b|under (the age of )?18|younger than 18/i, "under_18"],
+    [/terminated|discharged|asked to resign|ineligible for rehire|dismissed from/i, "terminated"],
+    [/\brelatives?\b|family members? (who )?(work|are employed)|related to (anyone|an employee)/i, "relatives_at_company"],
+    [/currently (an? )?(active )?employee|active employee|currently (employed|being paid) (by|directly)/i, "current_company_employee"],
+    [/currently enrolled at|current student (at|of)/i, "enrolled_at_company"],
+    [/currently (enrolled|a student|pursuing)|are you a (current )?student/i, "student"],
     [/sponsor|\bvisa\b|h-?1b/i, "requires_sponsorship"],
     [/non-?compete|restrictive covenant|bound by (any )?(agreement|contract)|restrict(s|ing)? your ability|prevent you from working/i, "restriction"],
     [/(legally )?(authori[sz]ed|eligible|permitted) to work|work authori[sz]ation|right to work/i, "authorized_us"],
     [/18 years|at least 18|age of 18|over the age/i, "over_18"],
-    [/previously (been )?(employed|worked)|ever (been )?(employed|worked) (by|for|at)|former employee/i, "previously_employed"],
+    [/previously (been )?(employed|worked)|ever (been )?(employed|worked) (by|for|at)|former (student|employee|affiliate|worker)|previous worker/i, "previously_employed"],
     [/relocat/i, "relocate"],
     [/current (or most recent )?(employer|company)|most recent (employer|company)|present employer/i, "current_employer"],
     [/current (or most recent )?(job )?title|current (role|position)|most recent (job )?title/i, "current_title"],
@@ -27,6 +34,8 @@
     [/notice period/i, "notice_period"],
     [/how many years|years of.*experience|years.*experience/i, "years_experience"],
     [/how did you (hear|find|learn)|where did you (hear|find)|referral source/i, "referral_source"],
+    [/phone (device )?type|type of phone/i, "phone_type"],
+    [/phone code|country code|dialing code/i, "phone_country"],
     [/why .*(interested|want to|join|apply)|what (excites|interests) you/i, "why_interested"],
   ];
 
@@ -77,7 +86,12 @@
     WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
   };
 
-  const values = { ...p };
+  const values = {
+    over_18: true, under_18: false, restriction: false, previously_employed: false,
+    terminated: false, relatives_at_company: false, current_company_employee: false,
+    enrolled_at_company: false, phone_type: "Mobile", ...p,
+  };
+  if (!values.phone_country) values.phone_country = values.country || "United States";
   if (!values.full_name) values.full_name = [p.first_name, p.last_name].filter(Boolean).join(" ");
   if (!values.preferred_name) values.preferred_name = p.first_name;
   if (!values.location && p.city) values.location = [p.city, p.state].filter(Boolean).join(", ");
@@ -108,7 +122,15 @@
     return clean([...new Set(parts.map(clean).filter(Boolean))].join(" "));
   }
 
+  function fieldLabel(el) {
+    const ff = el.closest('[data-automation-id^="formField-"]');
+    const l = ff && ff.querySelector("label, legend");
+    return l ? clean(l.innerText) : "";
+  }
+
   function questionText(el, exclude = []) {
+    const wd = fieldLabel(el);
+    if (wd) return wd;
     const fs = el.closest("fieldset");
     if (fs) {
       const lg = fs.querySelector("legend");
@@ -267,6 +289,272 @@
     return false;
   }
 
+  const FALLBACKS = {
+    referral_source: ["Company Website", "Careers Website", "Career Site", "Website", "Internet", "Job Board", "Other"],
+  };
+
+  function keySeq(el, key, code, keyCode) {
+    for (const t of ["keydown", "keypress", "keyup"]) {
+      el.dispatchEvent(new KeyboardEvent(t, { key, code, keyCode, which: keyCode, bubbles: true }));
+    }
+  }
+
+  function typeInto(el, text) {
+    el.focus();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    setter.call(el, "");
+    for (const ch of text) {
+      const code = /\d/.test(ch) ? "Digit" + ch : "Key" + ch.toUpperCase();
+      el.dispatchEvent(new KeyboardEvent("keydown", { key: ch, code, keyCode: ch.charCodeAt(0), bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent("keypress", { key: ch, code, keyCode: ch.charCodeAt(0), bubbles: true }));
+      setter.call(el, el.value + ch);
+      el.dispatchEvent(new InputEvent("input", { data: ch, inputType: "insertText", bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent("keyup", { key: ch, code, keyCode: ch.charCodeAt(0), bubbles: true }));
+    }
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  async function waitFor(fn, ms = 2000) {
+    for (let t = 0; t < ms; t += 100) {
+      const v = fn();
+      if (v && (!Array.isArray(v) || v.length)) return v;
+      await sleep(100);
+    }
+    return null;
+  }
+
+  function wantsFor(key, want) {
+    return [want, ...((!values[key] && FALLBACKS[key]) || [])].filter(Boolean);
+  }
+
+  function bestOf(opts, key, want) {
+    for (const w of wantsFor(key, want)) {
+      const pick = best(opts, w, key);
+      if (pick) return pick;
+    }
+    return null;
+  }
+
+  const isPlaceholder = (t) => !t || /^(select( one)?|choose( one)?|please select|--)/i.test(t);
+
+  async function fillListbox(btn, key, want) {
+    if (!isPlaceholder(clean(btn.innerText))) return "skip";
+    btn.click();
+    const lists = await waitFor(() => [...document.querySelectorAll('[role="listbox"]')]
+      .filter((l) => l.getAttribute("data-automation-id") !== "selectedItemList" && visible(l)
+        && l.querySelector('[role="option"]')));
+    if (!lists) return false;
+    const opts = [...lists[lists.length - 1].querySelectorAll('[role="option"]')]
+      .filter((o) => o.getAttribute("aria-disabled") !== "true")
+      .map((o) => ({ el: o, text: o.innerText }));
+    const pick = bestOf(opts, key, want);
+    if (!pick) {
+      keySeq(lists[lists.length - 1], "Escape", "Escape", 27);
+      if (btn.getAttribute("aria-expanded") === "true") btn.click();
+      return false;
+    }
+    pick.el.scrollIntoView({ block: "nearest" });
+    pick.el.click();
+    await sleep(400);
+    return !isPlaceholder(clean(btn.innerText));
+  }
+
+  async function fillPrompt(box, key, want) {
+    if (box.closest('[data-automation-id^="formField-"]')?.querySelector('[data-automation-id="selectedItem"]')) return "skip";
+    const input = box.querySelector("input");
+    if (!input) return false;
+    const ff = box.closest('[data-automation-id^="formField-"]') || box.parentElement;
+    const pills = () => ff.querySelectorAll('[data-automation-id="selectedItem"]').length;
+    for (const w of wantsFor(key, want)) {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+      input.focus();
+      setter.call(input, w);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      keySeq(input, "Enter", "Enter", 13);
+      for (let depth = 0; depth < 3; depth++) {
+        const opts = await waitFor(() => [...document.querySelectorAll('[data-automation-id="promptOption"]')]
+          .filter(visible).map((o) => ({ el: o, text: o.innerText })));
+        if (!opts) break;
+        const pick = best(opts, w, key) || (opts.length === 1 && depth > 0 ? opts[0] : null);
+        if (!pick) break;
+        pick.el.click();
+        await sleep(700);
+        if (pills()) {
+          keySeq(input, "Escape", "Escape", 27);
+          input.blur();
+          return true;
+        }
+      }
+      setter.call(input, "");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    keySeq(input, "Escape", "Escape", 27);
+    input.blur();
+    return false;
+  }
+
+  async function fillDate(ff, value) {
+    if (!value) return false;
+    const m = String(value).match(/^(\d{1,2})\/(\d{4})$/) || String(value).match(/^(\d{4})$/);
+    if (!m) return false;
+    const [month, year] = m.length === 3 ? [m[1].padStart(2, "0"), m[2]] : [null, m[1]];
+    const mi = ff.querySelector('input[data-automation-id="dateSectionMonth-input"]');
+    const yi = ff.querySelector('input[data-automation-id="dateSectionYear-input"]');
+    if (mi || yi) {
+      if (mi && month) { typeInto(mi, month); await sleep(150); }
+      if (yi) { typeInto(yi, year); await sleep(150); }
+      (yi || mi).dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+      (yi || mi).blur();
+      return true;
+    }
+    const plain = ff.querySelector('input:not([type="checkbox"]):not([type="radio"])');
+    if (plain && !plain.value) { setValue(plain, month ? `${month}/${year}` : year); return true; }
+    return false;
+  }
+
+  function labelOf(el) {
+    return fieldLabel(el) || ownLabel(el) || "";
+  }
+
+  function sectionAddButton(title) {
+    const re = new RegExp(`^${title}$`, "i");
+    const head = [...document.querySelectorAll("h2, h3, h4, h5, legend, [role='heading']")]
+      .find((h) => re.test(clean(h.innerText)) && visible(h));
+    if (!head) return null;
+    let node = head.parentElement;
+    for (let i = 0; node && i < 5; i++, node = node.parentElement) {
+      const b = [...node.querySelectorAll("button")].filter(visible)
+        .find((x) => /^add( another)?$/i.test(clean(x.innerText)) || new RegExp(`add.*${title}`, "i").test(x.getAttribute("aria-label") || ""));
+      if (b) return b;
+    }
+    return null;
+  }
+
+  function entryContainers(anchorRe, otherRe) {
+    const anchors = [...document.querySelectorAll("input")].filter((i) => visible(i) && anchorRe.test(labelOf(i)));
+    return anchors.map((a) => {
+      const grp = a.closest('[role="group"]');
+      if (grp && [...grp.querySelectorAll("input")].filter((i) => anchorRe.test(labelOf(i))).length === 1) return grp;
+      let node = a;
+      for (let i = 0; i < 8 && node.parentElement; i++) {
+        const up = node.parentElement;
+        const inputs = [...up.querySelectorAll("input")];
+        if (inputs.filter((x) => anchorRe.test(labelOf(x))).length > 1) break;
+        if (inputs.some((x) => otherRe.test(labelOf(x)))) break;
+        node = up;
+      }
+      return node;
+    });
+  }
+
+  function fieldsIn(container) {
+    const map = new Map();
+    for (const ff of container.querySelectorAll('[data-automation-id^="formField-"]')) {
+      const l = clean((ff.querySelector("label, legend") || {}).innerText);
+      if (l && !map.has(l)) map.set(l, ff);
+    }
+    if (!map.size) {
+      for (const el of container.querySelectorAll("input, textarea, button[aria-haspopup='listbox']")) {
+        const l = ownLabel(el);
+        if (l && !map.has(l)) map.set(l, el.parentElement);
+      }
+    }
+    return map;
+  }
+
+  async function fillEntryField(ff, value, isDate) {
+    if (value === undefined || value === null || value === "") return false;
+    if (isDate) return fillDate(ff, value);
+    const btn = ff.querySelector('button[aria-haspopup="listbox"]');
+    if (btn) { done.add(btn); return (await fillListbox(btn, null, String(value))) === true; }
+    const prompt = ff.querySelector('[data-automation-id="multiselectInputContainer"]');
+    if (prompt) return (await fillPrompt(prompt, null, String(value))) === true;
+    const el = ff.querySelector("textarea, input:not([type='checkbox']):not([type='radio']):not([type='file'])");
+    if (!el) return false;
+    done.add(el);
+    if (el.value) return false;
+    setValue(el, String(value));
+    mark(el, true);
+    return true;
+  }
+
+  const WORK_FIELDS = [
+    [/job title|position title|^title$/i, "title"],
+    [/company|employer|organi[sz]ation/i, "company"],
+    [/location|city/i, "location"],
+    [/^from|start/i, "from", true],
+    [/^to\b|^end/i, "to", true],
+    [/description|responsibilit|summary|duties/i, "description"],
+  ];
+  const EDU_FIELDS = [
+    [/school|university|institution|college/i, "school"],
+    [/degree/i, "degree"],
+    [/field of study|major|discipline/i, "field"],
+    [/gpa|overall result|grade/i, "gpa"],
+    [/^from|start|first year/i, "from", true],
+    [/^to\b|^end|last year|graduat/i, "to", true],
+  ];
+
+  async function fillEntries(section, anchorRe, otherRe, specs, entries, currentRe) {
+    if (!Array.isArray(entries) || !entries.length) return;
+    let boxes = entryContainers(anchorRe, otherRe);
+    const add = sectionAddButton(section);
+    while (add && boxes.length < entries.length) {
+      const before = boxes.length;
+      sectionAddButton(section)?.click();
+      await sleep(900);
+      boxes = entryContainers(anchorRe, otherRe);
+      if (boxes.length === before) break;
+    }
+    for (let i = 0; i < boxes.length && i < entries.length; i++) {
+      const e = entries[i];
+      const fieldsMap = fieldsIn(boxes[i]);
+      const anchorFilled = [...boxes[i].querySelectorAll("input")].find((x) => anchorRe.test(labelOf(x)));
+      if (anchorFilled && anchorFilled.value) continue;
+      if (currentRe && e.current) {
+        const cb = [...boxes[i].querySelectorAll('input[type="checkbox"]')].find((c) => currentRe.test(labelOf(c)));
+        if (cb) { done.add(cb); if (!cb.checked) { cb.click(); await sleep(300); } }
+      }
+      for (const [label, ff] of fieldsMap) {
+        const spec = specs.find(([re]) => re.test(label));
+        if (!spec) continue;
+        const [, field, isDate] = spec;
+        if (field === "to" && e.current) continue;
+        if (await fillEntryField(ff, e[field], isDate)) filled++;
+      }
+      boxes[i].querySelectorAll("input, textarea").forEach((x) => done.add(x));
+    }
+  }
+
+  async function fillWebsites(urls) {
+    if (!urls.length) return;
+    const anchorRe = /^url$|website url|^website$/i;
+    const add = sectionAddButton("Websites");
+    if (!add) return;
+    let inputs = () => [...document.querySelectorAll("input")].filter((i) => visible(i) && anchorRe.test(labelOf(i)));
+    const existing = new Set(inputs().map((i) => i.value).filter(Boolean));
+    const todo = urls.filter((u) => !existing.has(u));
+    for (const u of todo) {
+      let empty = inputs().find((i) => !i.value);
+      if (!empty) {
+        sectionAddButton("Websites")?.click();
+        empty = await waitFor(() => inputs().find((i) => !i.value), 1500);
+      }
+      if (!empty) break;
+      setValue(empty, u);
+      mark(empty, true);
+      done.add(empty);
+      filled++;
+    }
+  }
+
+  const isWorkday = /myworkday|workday/i.test(location.hostname) || !!document.querySelector('[data-automation-id^="formField-"]');
+  if (isWorkday) {
+    await fillEntries("Work Experience", /^job title/i, /school|university/i, WORK_FIELDS, values.experience, /currently work|i currently/i);
+    await fillEntries("Education", /^(school|university|school or university)/i, /^job title/i, EDU_FIELDS, values.education, null);
+    await fillWebsites([values.linkedin, values.github, values.website, values.scholar].filter(Boolean));
+  }
+
   const fields = [...document.querySelectorAll("input, textarea, select")];
 
   for (const el of fields) {
@@ -274,6 +562,8 @@
     const type = (el.type || "").toLowerCase();
     if (["hidden", "submit", "button", "reset", "image", "password", "file", "search"].includes(type)) continue;
     if (!visible(el)) continue;
+    if (el.closest('[data-automation-id="multiselectInputContainer"]')) continue;
+    if (/^dateSection/.test(el.getAttribute("data-automation-id") || "")) continue;
 
     if (type === "radio" || type === "checkbox") {
       const group = el.name
@@ -283,10 +573,16 @@
       const opts = group.map((g) => ({ el: g, text: ownLabel(g) || g.value }));
       const q = questionText(el, opts.map((o) => o.text));
       const single = group.length === 1 && type === "checkbox";
+      if (single && !el.checked) {
+        const ql = fieldLabel(el) || questionText(el, [ownLabel(el)]);
+        const qk = keyFor(ql, null, null);
+        const qw = qk && !BOOL_KEYS.has(qk) && wanted(qk);
+        if (qw && score(ownLabel(el), qw, qk) >= 80) { el.click(); mark(el, true); filled++; continue; }
+      }
       const key = keyFor(single ? ownLabel(el) || q : q, null, null);
       if (group.some((g) => g.checked)) continue;
       const want = key && wanted(key);
-      if (!want) { noteMissing(el, q); continue; }
+      if (!want) { if (!single) noteMissing(el, q); continue; }
       if (single) {
         if (want === "Yes") { el.click(); mark(el, true); filled++; }
         continue;
@@ -326,6 +622,32 @@
     filled++;
   }
 
+  for (const btn of document.querySelectorAll('button[aria-haspopup="listbox"]')) {
+    if (done.has(btn) || !visible(btn)) continue;
+    done.add(btn);
+    const label = fieldLabel(btn) || clean((btn.getAttribute("aria-label") || "").replace(btn.innerText, ""));
+    const key = keyFor(label, btn.name ? btn.name.replace(/([a-z])([A-Z])/g, "$1 $2") : "", null);
+    const want = key && wanted(key);
+    if (!isPlaceholder(clean(btn.innerText))) continue;
+    const req = /\bRequired\b/.test(btn.getAttribute("aria-label") || "") ? " *" : "";
+    if (!want) { noteMissing(btn, label + req); continue; }
+    const r = await fillListbox(btn, key, want);
+    if (r === true) { mark(btn, true); filled++; } else if (r === false) noteMissing(btn, label + req);
+  }
+
+  for (const box of document.querySelectorAll('[data-automation-id="multiselectInputContainer"]')) {
+    if (!visible(box)) continue;
+    const label = fieldLabel(box);
+    const key = keyFor(label, null, null);
+    const want = key && wanted(key);
+    if (!want) {
+      if (!box.closest('[data-automation-id^="formField-"]')?.querySelector('[data-automation-id="selectedItem"]')) noteMissing(box.querySelector("input") || box, label);
+      continue;
+    }
+    const r = await fillPrompt(box, key, want);
+    if (r === true) { mark(box, true); filled++; } else if (r === false) noteMissing(box.querySelector("input") || box, label);
+  }
+
   const yesNoGroups = new Set();
   for (const b of document.querySelectorAll("button")) {
     const t = norm(b.innerText);
@@ -355,7 +677,9 @@
     });
     let target = scored.filter((x) => x.s > 0).sort((a, b) => b.s - a.s)[0];
     if (!target && inputs.length === 1 && scored[0].s >= 0) target = scored[0];
-    if (target && !target.f.files.length) {
+    const near = target && (target.f.closest('[data-automation-id^="formField-"], section') || target.f.parentElement?.parentElement?.parentElement);
+    const already = near && /successfully uploaded|upload(ed)? successful/i.test(near.innerText || "");
+    if (target && !target.f.files.length && !already) {
       const bin = atob(resume.data);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
