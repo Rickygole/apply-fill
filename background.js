@@ -29,8 +29,8 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (tab) fillTab(tab.id).catch(() => {});
 });
 
-chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.type !== "fill") return;
-  fillTab(msg.tabId).then(reply, (e) => reply({ errors: [String(e.message || e)] }));
+  fillTab(msg.tabId ?? sender.tab.id).then(reply, (e) => reply({ errors: [String(e.message || e)] }));
   return true;
 });

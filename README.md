@@ -22,7 +22,11 @@ Filled fields get a green outline. Required fields it could not answer get an or
 
 ## Use
 
-Open an application page and press `Alt+Shift+F`, or click the icon and hit Fill this page. Run it again after a multi-step form moves to the next page.
+A green Fill application button shows up in the bottom right corner whenever you land on an application form. It watches for known applicant tracking systems (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, iCIMS and others) and for any page with name, email, phone and resume fields. Click it, review, submit yourself. Click again after a multi-step form moves to the next page.
+
+The x next to it hides the button for that page until you close the tab. To turn the button off everywhere, untick it at the top of the profile page.
+
+`Alt+Shift+F` and the toolbar icon still work on any page.
 
 ## Importing a profile
 

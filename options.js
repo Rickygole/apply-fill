@@ -90,7 +90,11 @@ function flash(msg) {
   setTimeout(() => (status.textContent = ""), 2500);
 }
 
-chrome.storage.local.get(["profile", "resume"]).then((s) => {
+const showButton = document.getElementById("showButton");
+showButton.onchange = () => chrome.storage.local.set({ showButton: showButton.checked });
+
+chrome.storage.local.get(["profile", "resume", "showButton"]).then((s) => {
+  showButton.checked = s.showButton !== false;
   writeForm(s.profile || { authorized_us: true, over_18: true });
   resume = s.resume || null;
   showResume();
