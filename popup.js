@@ -3,6 +3,22 @@ const out = document.getElementById("out");
 
 document.getElementById("opts").onclick = () => chrome.runtime.openOptionsPage();
 
+(async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const always = document.getElementById("always");
+  let hostname = "";
+  try { hostname = new URL(tab.url).hostname; } catch {}
+  if (!hostname) { always.parentElement.remove(); return; }
+  document.getElementById("site").textContent = hostname;
+  const { alwaysHosts = [] } = await chrome.storage.local.get("alwaysHosts");
+  always.checked = alwaysHosts.includes(hostname);
+  always.onchange = async () => {
+    const { alwaysHosts: cur = [] } = await chrome.storage.local.get("alwaysHosts");
+    const next = always.checked ? [...new Set([...cur, hostname])] : cur.filter((h) => h !== hostname);
+    await chrome.storage.local.set({ alwaysHosts: next });
+  };
+})();
+
 btn.onclick = async () => {
   btn.disabled = true;
   out.textContent = "Filling...";

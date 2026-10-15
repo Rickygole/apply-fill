@@ -2,30 +2,56 @@
   if (window.__applyFillDetect) return;
   window.__applyFillDetect = true;
 
-  const ATS = /greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|myworkday\.com|smartrecruiters\.com|icims\.com|jobvite\.com|bamboohr\.com|workable\.com|taleo\.net|successfactors\.|rippling\.com|dover\.com|breezy\.hr|recruitee\.com|teamtailor\.com|personio\.|jazzhr\.com|applytojob\.com|paylocity\.com|ultipro\.com|oraclecloud\.com|eightfold\.ai|wellfound\.com/i;
+  const JOB_SITES = new RegExp([
+    "greenhouse\\.io", "grnh\\.se", "lever\\.co", "ashbyhq\\.com", "myworkdayjobs\\.com", "myworkday\\.com", "workday\\.com",
+    "smartrecruiters\\.com", "icims\\.com", "jobvite\\.com", "bamboohr\\.com", "workable\\.com", "taleo\\.net",
+    "successfactors\\.", "sapsf\\.", "rippling\\.com", "dover\\.com", "breezy\\.hr", "recruitee\\.com", "teamtailor\\.com",
+    "personio\\.", "jazzhr\\.com", "applytojob\\.com", "paylocity\\.com", "paycomonline\\.", "ultipro\\.com", "ukg\\.",
+    "oraclecloud\\.com", "eightfold\\.ai", "adp\\.com", "csod\\.com", "avature\\.net", "phenompeople\\.com",
+    "pinpointhq\\.com", "gem\\.com", "comeet\\.", "freshteam\\.com", "zohorecruit\\.", "manatal\\.com", "bullhorn",
+    "applicantpro\\.com", "clearcompany\\.com", "hirebridge\\.com", "peoplefluent\\.com", "jobylon\\.com", "homerun\\.co",
+    "trinethire\\.com", "hiringthing\\.com", "join\\.com", "polymer\\.co", "notion\\.site",
+    "linkedin\\.com", "indeed\\.com", "glassdoor\\.", "ziprecruiter\\.com", "dice\\.com", "monster\\.", "careerbuilder\\.com",
+    "simplyhired\\.com", "usajobs\\.gov", "joinhandshake\\.com", "wellfound\\.com", "angel\\.co", "builtin\\.com",
+    "hired\\.com", "otta\\.com", "welcometothejungle\\.com", "ycombinator\\.com", "workatastartup\\.com", "jobright\\.ai",
+    "levels\\.fyi", "idealist\\.org", "higheredjobs\\.com", "interfolio\\.com", "academicjobsonline\\.org",
+    "governmentjobs\\.com", "schooljobs\\.com", "clearancejobs\\.com", "flexjobs\\.com", "weworkremotely\\.com",
+    "remoteok\\.com", "remote\\.co", "themuse\\.com", "snagajob\\.com", "jobs\\.", "\\.jobs$", "careers\\.", "talent\\.", "apply\\.",
+  ].join("|"), "i");
+  const JOB_URL = /career|\bjobs?\b|apply|application|recruit|talent|hiring|vacanc|opening|position|requisition|candidate/i;
   const dismissKey = "applyfill-dismissed:" + location.host + location.pathname;
 
   let host = null;
   let shown = false;
+  let alwaysHere = false;
+
+  function hasPassword() {
+    return [...document.querySelectorAll('input[type="password"]')].some((el) => el.getBoundingClientRect().width > 0);
+  }
 
   function looksLikeApplication() {
     const fields = [...document.querySelectorAll("input, textarea, select")].filter((el) => {
+      if (["hidden", "submit", "button", "image", "reset"].includes(el.type)) return false;
       const r = el.getBoundingClientRect();
       return el.type === "file" || (r.width > 0 && r.height > 0);
     });
-    if (fields.length < 3) return false;
+    if (alwaysHere) return fields.length > 0;
+    if (!fields.length || hasPassword()) return false;
     const text = fields.map((el) => [
       el.name, el.id, el.placeholder, el.getAttribute("aria-label"), el.getAttribute("autocomplete"),
       ...(el.labels ? [...el.labels].map((l) => l.innerText) : []),
     ].join(" ")).join(" ").toLowerCase();
     const hits = [
-      /first.?name|given.?name|full.?name|legal.?name/.test(text),
+      /first.?name|given.?name|full.?name|legal.?name|last.?name/.test(text),
       /e.?mail/.test(text),
       /phone|mobile|\btel\b/.test(text),
       /resume|\bcv\b/.test(text) || fields.some((el) => el.type === "file"),
-      /linkedin/.test(text),
+      /linkedin|github|portfolio/.test(text),
+      /sponsor|authori[sz]ed to work|veteran|disab|gender|salary|relocat|start date/.test(text),
+      /address|city|zip|postal/.test(text),
     ].filter(Boolean).length;
-    if (ATS.test(location.hostname)) return hits >= 2;
+    if (JOB_SITES.test(location.hostname)) return hits >= 1 && fields.length >= 2 || hits >= 2;
+    if (JOB_URL.test(location.href) || JOB_URL.test(document.title)) return hits >= 2;
     return hits >= 3;
   }
 
@@ -95,9 +121,9 @@
   async function check() {
     if (shown) return;
     try { if (sessionStorage.getItem(dismissKey)) return; } catch {}
-    if (!looksLikeApplication()) return;
-    const { showButton } = await chrome.storage.local.get("showButton");
-    if (showButton === false || shown) return;
+    const { showButton, alwaysHosts } = await chrome.storage.local.get(["showButton", "alwaysHosts"]);
+    alwaysHere = (alwaysHosts || []).includes(location.hostname);
+    if (showButton === false || shown || !looksLikeApplication()) return;
     build();
   }
 
@@ -113,5 +139,8 @@
     timer = setTimeout(check, 600);
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.alwaysHosts || changes.showButton) check();
+  });
   check();
 })();

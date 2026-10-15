@@ -12,12 +12,15 @@
   .err { color: #b91c1c; }
   .row { display: flex; justify-content: space-between; margin-top: 12px; font-size: 12px; }
   a { color: #1d4ed8; cursor: pointer; }
+  .always { display: flex; gap: 6px; align-items: center; margin-top: 12px; font-size: 12px; }
+  #site { font-weight: 600; word-break: break-all; }
 </style>
 </head>
 <body>
   <h1>Apply Fill</h1>
   <button id="fill">Fill this page</button>
   <div id="out"></div>
+  <label class="always"><input type="checkbox" id="always"> Always show the button on <span id="site"></span></label>
   <div class="row"><span>Alt+Shift+F</span><a id="opts">Edit profile</a></div>
   <script src="popup.js"></script>
 </body>

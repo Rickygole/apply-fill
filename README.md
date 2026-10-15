@@ -22,9 +22,18 @@ Filled fields get a green outline. Required fields it could not answer get an or
 
 ## Use
 
-A green Fill application button shows up in the bottom right corner whenever you land on an application form. It watches for known applicant tracking systems (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, iCIMS and others) and for any page with name, email, phone and resume fields. Click it, review, submit yourself. Click again after a multi-step form moves to the next page.
+A green Fill application button shows up in the bottom right corner whenever you land on an application form. Click it, review, submit yourself. Click again after a multi-step form moves to the next page.
 
-The x next to it hides the button for that page until you close the tab. To turn the button off everywhere, untick it at the top of the profile page.
+Where it shows up:
+
+- About 80 job sites and applicant tracking systems: Greenhouse, Lever, Ashby, Workday, SmartRecruiters, iCIMS, Taleo, SuccessFactors, ADP, LinkedIn, Indeed, Glassdoor, Handshake, Wellfound, USAJobs, Dice, ZipRecruiter and more, plus any `jobs.`, `careers.` or `.jobs` domain
+- Any page whose URL or title looks like a job application and has at least two applicant fields
+- Any other page with three or more applicant fields (name, email, phone, resume, links, address, screening questions)
+- Never on login pages
+
+If a site is missed, open the extension popup and tick Always show the button on that site.
+
+The x next to the button hides it for that page until you close the tab. To turn the button off everywhere, untick it at the top of the profile page.
 
 `Alt+Shift+F` and the toolbar icon still work on any page.
 
