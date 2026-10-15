@@ -6,6 +6,9 @@ A Chrome extension that fills job application forms from a profile you save once
 
 - Text fields, textareas, native selects, radio groups and checkboxes, matched by label, `aria-*`, `autocomplete`, placeholder and field name
 - Greenhouse style react-select dropdowns (relocation, sponsorship, EEO questions)
+- Workday: Select One dropdowns, search prompts (country phone code, field of study, how did you hear), Yes/No radios, month and year date boxes
+- Workday My Experience: adds and fills one Work Experience panel per job, Education panels with degree, field of study, GPA and years, and your website links
+- Common screening questions: under 18, terminated for cause, relatives at the company, current employee or student of the company, worked there before, and the "if yes, please explain" box after the sponsorship question
 - Ashby style Yes/No button pairs
 - Resume upload: attaches your saved PDF to the resume field and skips cover letter fields
 - Forms inside iframes, so Greenhouse boards embedded on company sites work too
@@ -48,6 +51,15 @@ The options page imports and exports JSON shaped like this:
 }
 ```
 
+Work experience and education are lists in the profile:
+
+```json
+"experience": [{ "title": "Research Assistant", "company": "Acme University", "location": "Baltimore, MD", "from": "01/2025", "current": true, "description": "..." }],
+"education": [{ "school": "Acme University", "degree": "Master of Science", "field": "Computer Science", "field_alt": "Computer and Information Science", "gpa": "4.0", "from": "2025", "to": "2026" }]
+```
+
+`field_alt` is tried when the site's field of study list does not have your exact major.
+
 `tools/export_profile.py` builds that file from a `profile.yaml` in the lazy-apply format:
 
 ```
@@ -62,7 +74,8 @@ Everything lives in `chrome.storage.local` on your machine. The extension makes 
 
 ## Limits
 
-- Workday's custom dropdowns are not handled yet. Its text fields work.
+- Terms and consent checkboxes are left for you on purpose.
+- If an entry already has text in it, the extension leaves that entry alone. Clear junk first if you want it refilled.
 - Free text questions specific to a company are left blank on purpose.
 - Dropdowns that load options from a server (school or location search) are filled by typing, which works less reliably.
 

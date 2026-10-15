@@ -23,8 +23,8 @@
     [/relocat/i, "relocate"],
     [/current (or most recent )?(employer|company)|most recent (employer|company)|present employer/i, "current_employer"],
     [/current (or most recent )?(job )?title|current (role|position)|most recent (job )?title/i, "current_title"],
-    [/race|ethnicit/i, "race"],
     [/hispanic|latin[oax]/i, "hispanic_latino"],
+    [/\brace\b|ethnicit/i, "race"],
     [/gender|\bsex\b/i, "gender"],
     [/veteran|military|armed forces/i, "veteran_status"],
     [/disab/i, "disability_status"],
@@ -99,7 +99,8 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const clean = (s) => (s || "").replace(/\s+/g, " ").replace(/\*/g, "").trim();
   const norm = (s) => clean(s).toLowerCase();
-  const tokens = (s) => norm(s).replace(/[^a-z0-9 ]/g, " ").split(" ").filter((t) => t.length > 1);
+  const tokens = (s) => norm(s).replace(/[^a-z0-9 ]/g, " ").split(" ").filter((t) => t.length > 1)
+    .map((t) => (t.length > 4 ? t.replace(/s$/, "") : t));
   const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   function visible(el) {
@@ -165,6 +166,26 @@
     if (hints) {
       for (const [re, k] of BASIC) if (re.test(hints)) return k;
       for (const [re, k] of SCREENER) if (re.test(hints)) return k;
+    }
+    return null;
+  }
+
+  const FOLLOWUP = { requires_sponsorship: "sponsorship_explanation", authorized_us: "authorization_explanation" };
+
+  function previousQuestionKey(el) {
+    const ffs = [...document.querySelectorAll('[data-automation-id^="formField-"]')];
+    const own = el.closest('[data-automation-id^="formField-"]');
+    let prev = [];
+    if (own && ffs.includes(own)) {
+      prev = ffs.slice(0, ffs.indexOf(own)).reverse().map((f) => clean((f.querySelector("label, legend") || {}).innerText));
+    } else {
+      const all = [...document.querySelectorAll("input, select, textarea")];
+      prev = all.slice(0, all.indexOf(el)).reverse().map((x) => ownLabel(x) || questionText(x));
+    }
+    for (const l of prev.slice(0, 3)) {
+      if (!l || /^if (yes|so)\b/i.test(l)) continue;
+      const k = keyFor(l, null, null);
+      if (k) return k;
     }
     return null;
   }
@@ -323,8 +344,17 @@
     return null;
   }
 
+  function degreeAliases(want) {
+    if (/master|^m\.?s\.?\b|^m\.?a\.?\b|mba/i.test(want)) return ["Masters", "Master's Degree", "Master's", "Master"];
+    if (/bachelor|^b\.?s\.?\b|^b\.?a\.?\b/i.test(want)) return ["Bachelors", "Bachelor's Degree", "Bachelor's", "Bachelor"];
+    if (/doctor|ph\.?d/i.test(want)) return ["Doctoral", "Doctorate", "PhD", "Doctoral/Professional"];
+    if (/associate/i.test(want)) return ["Associates", "Associate's Degree", "Associate"];
+    return [];
+  }
+
   function wantsFor(key, want) {
-    return [want, ...((!values[key] && FALLBACKS[key]) || [])].filter(Boolean);
+    const extra = key === "degree" ? degreeAliases(want) : (!values[key] && FALLBACKS[key]) || [];
+    return [want, ...extra].filter(Boolean);
   }
 
   function bestOf(opts, key, want) {
@@ -421,13 +451,12 @@
     const head = [...document.querySelectorAll("h2, h3, h4, h5, legend, [role='heading']")]
       .find((h) => re.test(clean(h.innerText)) && visible(h));
     if (!head) return null;
-    let node = head.parentElement;
-    for (let i = 0; node && i < 5; i++, node = node.parentElement) {
-      const b = [...node.querySelectorAll("button")].filter(visible)
-        .find((x) => /^add( another)?$/i.test(clean(x.innerText)) || new RegExp(`add.*${title}`, "i").test(x.getAttribute("aria-label") || ""));
-      if (b) return b;
-    }
-    return null;
+    const peers = [...document.querySelectorAll(head.tagName)];
+    const next = peers[peers.indexOf(head) + 1];
+    const FOLLOW = Node.DOCUMENT_POSITION_FOLLOWING;
+    return [...document.querySelectorAll("button")].filter(visible)
+      .filter((x) => /^add( another)?$/i.test(clean(x.innerText)) || /^add\b/i.test(x.getAttribute("aria-label") || ""))
+      .find((x) => (head.compareDocumentPosition(x) & FOLLOW) && (!next || (x.compareDocumentPosition(next) & FOLLOW))) || null;
   }
 
   function entryContainers(anchorRe, otherRe) {
@@ -462,13 +491,17 @@
     return map;
   }
 
-  async function fillEntryField(ff, value, isDate) {
+  async function fillEntryField(ff, value, isDate, field, alt) {
     if (value === undefined || value === null || value === "") return false;
     if (isDate) return fillDate(ff, value);
+    const key = field === "degree" ? "degree" : null;
     const btn = ff.querySelector('button[aria-haspopup="listbox"]');
-    if (btn) { done.add(btn); return (await fillListbox(btn, null, String(value))) === true; }
+    if (btn) { done.add(btn); return (await fillListbox(btn, key, String(value))) === true; }
     const prompt = ff.querySelector('[data-automation-id="multiselectInputContainer"]');
-    if (prompt) return (await fillPrompt(prompt, null, String(value))) === true;
+    if (prompt) {
+      for (const v of [value, alt].filter(Boolean)) if ((await fillPrompt(prompt, key, String(v))) === true) return true;
+      return false;
+    }
     const el = ff.querySelector("textarea, input:not([type='checkbox']):not([type='radio']):not([type='file'])");
     if (!el) return false;
     done.add(el);
@@ -520,7 +553,7 @@
         if (!spec) continue;
         const [, field, isDate] = spec;
         if (field === "to" && e.current) continue;
-        if (await fillEntryField(ff, e[field], isDate)) filled++;
+        if (await fillEntryField(ff, e[field], isDate, field, e[field + "_alt"])) filled++;
       }
       boxes[i].querySelectorAll("input, textarea").forEach((x) => done.add(x));
     }
@@ -577,12 +610,12 @@
         const ql = fieldLabel(el) || questionText(el, [ownLabel(el)]);
         const qk = keyFor(ql, null, null);
         const qw = qk && !BOOL_KEYS.has(qk) && wanted(qk);
-        if (qw && score(ownLabel(el), qw, qk) >= 80) { el.click(); mark(el, true); filled++; continue; }
+        if (qw && score(ownLabel(el), qw, qk) >= 50) { el.click(); mark(el, true); filled++; continue; }
       }
       const key = keyFor(single ? ownLabel(el) || q : q, null, null);
       if (group.some((g) => g.checked)) continue;
       const want = key && wanted(key);
-      if (!want) { if (!single) noteMissing(el, q); continue; }
+      if (!want) { noteMissing(el, single ? ownLabel(el) || q : q); continue; }
       if (single) {
         if (want === "Yes") { el.click(); mark(el, true); filled++; }
         continue;
@@ -595,7 +628,10 @@
     done.add(el);
     const label = ownLabel(el) || (el.tagName !== "SELECT" ? "" : questionText(el, [...el.options].map((o) => o.text)));
     const fallbackQ = label ? "" : questionText(el);
-    const key = keyFor(label || (fallbackQ.length <= 200 ? fallbackQ : ""), nameHints(el), el);
+    const q0 = label || fallbackQ;
+    const key = /^if (yes|so)\b.*(explain|describe|provide|detail|specify)/i.test(q0)
+      ? FOLLOWUP[previousQuestionKey(el)] || null
+      : keyFor(label || (fallbackQ.length <= 200 ? fallbackQ : ""), nameHints(el), el);
     const want = key && wanted(key);
     const shown = label || fallbackQ || nameHints(el);
 

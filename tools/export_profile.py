@@ -33,6 +33,8 @@ def main():
         "scholar": links.get("google_scholar", ""),
         "authorized_us": bool(g("work_authorization", "authorized_us", False)),
         "requires_sponsorship": bool(g("work_authorization", "requires_sponsorship", False)),
+        "sponsorship_explanation": g("work_authorization", "sponsorship_statement"),
+        "authorization_explanation": g("work_authorization", "authorized_statement"),
         "start_date": g("availability", "earliest_start"),
         "notice_period": g("availability", "notice_period"),
         "gender": g("eeo", "gender"),

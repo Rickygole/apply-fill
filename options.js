@@ -23,6 +23,7 @@ const SECTIONS = [
   ["Screening questions", [
     ["authorized_us", "Authorized to work in the US", "", "bool"],
     ["requires_sponsorship", "Requires visa sponsorship", "", "bool"],
+    ["sponsorship_explanation", "If yes, please explain (sponsorship)", "wide"],
     ["over_18", "At least 18 years old", "", "bool"],
     ["relocate", "Willing to relocate", "", "bool"],
     ["restriction", "Bound by a non-compete", "", "bool"],
@@ -33,7 +34,7 @@ const SECTIONS = [
   ]],
   ["Work experience and education", [
     ["experience", "Work experience, newest first: [{title, company, location, from: \"MM/YYYY\", to, current, description}]", "wide", "json"],
-    ["education", "Education: [{school, degree, field, gpa, from: \"YYYY\", to}]", "wide", "json"],
+    ["education", "Education: [{school, degree, field, field_alt, gpa, from: \"YYYY\", to}]", "wide", "json"],
   ]],
   ["Voluntary self-ID", [
     ["gender", "Gender"], ["race", "Race / ethnicity"],
