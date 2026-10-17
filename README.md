@@ -10,7 +10,7 @@ A Chrome extension that fills job application forms from a profile you save once
 - Workday My Experience: adds and fills one Work Experience panel per job, Education panels with degree, field of study, GPA and years, and your website links
 - Common screening questions: under 18, terminated for cause, relatives at the company, current employee or student of the company, worked there before, and the "if yes, please explain" box after the sponsorship question
 - Ashby style Yes/No button pairs
-- Resume upload: attaches your saved PDF to the resume field and skips cover letter fields
+- Resume upload is optional: save a PDF and it goes into the resume field, or leave it empty and attach a tailored resume yourself each time
 - Forms inside iframes, so Greenhouse boards embedded on company sites work too
 - Screening questions: work authorization, sponsorship, non-compete, 18+, relocation, prior employment
 - Voluntary self-ID: gender, race, Hispanic or Latino, veteran and disability status
@@ -21,7 +21,7 @@ Filled fields get a green outline. Required fields it could not answer get an or
 
 1. Open `chrome://extensions` and turn on Developer mode
 2. Click Load unpacked and pick this folder
-3. Click the extension icon, then Edit profile, fill it in, attach your resume, Save
+3. Click the extension icon, then Edit profile, fill it in, Save
 
 ## Use
 
@@ -42,7 +42,7 @@ The x next to the button hides it for that page until you close the tab. To turn
 
 ## Importing a profile
 
-The options page imports and exports JSON shaped like this:
+The options page imports and exports JSON shaped like this. Import only fills boxes that are empty, so anything you typed stays. The resume part is optional.
 
 ```json
 {

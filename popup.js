@@ -31,7 +31,7 @@ btn.onclick = async () => {
     return;
   }
   const lines = [`Filled <b>${r.filled}</b> field${r.filled === 1 ? "" : "s"}.`];
-  lines.push(r.resume ? "Resume attached." : "No resume upload found.");
+  lines.push(r.resume ? "Resume attached." : "Resume not attached. Add your tailored one.");
   out.innerHTML = lines.map((l) => `<div>${l}</div>`).join("");
   if (r.missing.length) {
     out.innerHTML += `<div>Required fields left for you (orange):</div><ul>${r.missing

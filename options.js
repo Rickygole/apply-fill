@@ -48,6 +48,7 @@ const form = document.getElementById("form");
 const status = document.getElementById("status");
 const resumeName = document.getElementById("resumeName");
 let resume = null;
+let hadProfile = false;
 
 for (const [title, fields] of SECTIONS) {
   const h = document.createElement("h2");
@@ -96,8 +97,28 @@ function writeForm(p) {
   }
 }
 
+function fillBlanks(p) {
+  let n = 0;
+  for (const el of form.elements) {
+    if (!(el.name in p)) continue;
+    if (el.type === "checkbox") {
+      if (hadProfile) continue;
+      el.checked = !!p[el.name];
+    } else if (el.value.trim()) continue;
+    else if (el.dataset.json) {
+      if (!p[el.name] || !p[el.name].length) continue;
+      el.value = JSON.stringify(p[el.name], null, 2);
+    } else {
+      if (p[el.name] == null || p[el.name] === "") continue;
+      el.value = p[el.name];
+    }
+    n++;
+  }
+  return n;
+}
+
 function showResume() {
-  resumeName.textContent = resume ? `Saved: ${resume.name} (${Math.round(resume.data.length * 0.75 / 1024)} KB)` : "No resume saved.";
+  resumeName.textContent = resume ? `Saved: ${resume.name} (${Math.round(resume.data.length * 0.75 / 1024)} KB)` : "No resume saved. You attach one on each application.";
 }
 
 function flash(msg) {
@@ -110,6 +131,7 @@ showButton.onchange = () => chrome.storage.local.set({ showButton: showButton.ch
 
 chrome.storage.local.get(["profile", "resume", "showButton"]).then((s) => {
   showButton.checked = s.showButton !== false;
+  hadProfile = !!s.profile;
   writeForm(s.profile || { authorized_us: true, over_18: true });
   resume = s.resume || null;
   showResume();
@@ -133,6 +155,13 @@ document.getElementById("save").onclick = async () => {
   flash("Saved");
 };
 
+document.getElementById("clearResume").onclick = () => {
+  resume = null;
+  document.getElementById("resumeFile").value = "";
+  showResume();
+  flash("Resume removed. Press Save to keep it that way.");
+};
+
 document.getElementById("import").onclick = () => document.getElementById("importFile").click();
 
 document.getElementById("importFile").onchange = async (e) => {
@@ -140,9 +169,9 @@ document.getElementById("importFile").onchange = async (e) => {
   if (!f) return;
   try {
     const data = JSON.parse(await f.text());
-    writeForm(data.profile || data);
-    if (data.resume) { resume = data.resume; showResume(); }
-    flash("Imported. Press Save to keep it.");
+    const n = fillBlanks(data.profile || data);
+    if (data.resume && !resume) { resume = data.resume; showResume(); }
+    flash(`Filled ${n} empty field${n === 1 ? "" : "s"}. Nothing you typed was changed. Press Save to keep it.`);
   } catch {
     flash("That file is not valid JSON.");
   }
