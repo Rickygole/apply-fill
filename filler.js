@@ -6,6 +6,7 @@
     "authorized_us", "requires_sponsorship", "hispanic_latino", "restriction",
     "over_18", "relocate", "previously_employed", "under_18", "terminated",
     "relatives_at_company", "current_company_employee", "enrolled_at_company", "student",
+    "interviewed_before", "onsite_ok",
   ]);
 
   const SCREENER = [
@@ -19,8 +20,10 @@
     [/non-?compete|restrictive covenant|bound by (any )?(agreement|contract)|restrict(s|ing)? your ability|prevent you from working/i, "restriction"],
     [/(legally )?(authori[sz]ed|eligible|permitted) to work|work authori[sz]ation|right to work/i, "authorized_us"],
     [/18 years|at least 18|age of 18|over the age/i, "over_18"],
+    [/(interviewed|applied) (with|at|for|to) .{0,60}(before|previously|in the past)|previously (interviewed|applied)|ever (interviewed|applied)/i, "interviewed_before"],
     [/previously (been )?(employed|worked)|ever (been )?(employed|worked) (by|for|at)|former (student|employee|affiliate|worker)|previous worker/i, "previously_employed"],
     [/relocat/i, "relocate"],
+    [/in.?office|on.?site|in.?person|hybrid|days? (a|per|\/) ?week|commut/i, "onsite_ok"],
     [/current (or most recent )?(employer|company)|most recent (employer|company)|present employer/i, "current_employer"],
     [/current (or most recent )?(job )?title|current (role|position)|most recent (job )?title/i, "current_title"],
     [/hispanic|latin[oax]/i, "hispanic_latino"],
@@ -89,7 +92,7 @@
   const values = {
     over_18: true, under_18: false, restriction: false, previously_employed: false,
     terminated: false, relatives_at_company: false, current_company_employee: false,
-    enrolled_at_company: false, phone_type: "Mobile", ...p,
+    enrolled_at_company: false, interviewed_before: false, onsite_ok: true, phone_type: "Mobile", ...p,
   };
   if (!values.phone_country) values.phone_country = values.country || "United States";
   if (!values.full_name) values.full_name = [p.first_name, p.last_name].filter(Boolean).join(" ");
@@ -588,7 +591,11 @@
     await fillWebsites([values.linkedin, values.github, values.website, values.scholar].filter(Boolean));
   }
 
+  for (let pass = 0; pass < 3; pass++) {
+  if (pass) await sleep(500);
   const fields = [...document.querySelectorAll("input, textarea, select")];
+  const fresh = fields.filter((el) => !done.has(el) && visible(el) && !["hidden", "submit", "button", "reset", "image", "password", "file", "search"].includes((el.type || "").toLowerCase()));
+  if (pass && !fresh.length) break;
 
   for (const el of fields) {
     if (done.has(el)) continue;
@@ -656,6 +663,7 @@
     setValue(el, want);
     mark(el, true);
     filled++;
+  }
   }
 
   for (const btn of document.querySelectorAll('button[aria-haspopup="listbox"]')) {
