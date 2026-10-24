@@ -58,6 +58,7 @@ def main():
         "accept_acknowledgements": True,
         "terminated": False,
         "relatives_at_company": False,
+        "criminal_conviction": False,
     }
 
     out = {"profile": profile}

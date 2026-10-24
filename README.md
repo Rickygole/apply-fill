@@ -8,7 +8,7 @@ A Chrome extension that fills job application forms from a profile you save once
 - Greenhouse style react-select dropdowns (relocation, sponsorship, EEO questions), and the Greenhouse Education section with school, degree and discipline looked up from the site list
 - Workday: Select One dropdowns, search prompts (country phone code, field of study, how did you hear), Yes/No radios, month and year date boxes
 - Workday My Experience: adds and fills one Work Experience panel per job, Education panels with degree, field of study, GPA and years, and your website links
-- Common screening questions: under 18, terminated for cause, interviewed or applied before, open to on site or hybrid work, relatives at the company, current employee or student of the company, worked there before, and the "if yes, please explain" box after the sponsorship question
+- Common screening questions: under 18, terminated for cause, criminal convictions, temporary work authorization such as OPT, interviewed or applied before, open to on site or hybrid work, relatives at the company, current employee or student of the company, worked there before, and the "if yes, please explain" box after the sponsorship question
 - Ashby style Yes/No button pairs
 - Resume upload is optional: save a PDF and it goes into the resume field, or leave it empty and attach a tailored resume yourself each time
 - Forms inside iframes, so Greenhouse boards embedded on company sites work too

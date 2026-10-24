@@ -6,23 +6,25 @@
     "authorized_us", "requires_sponsorship", "hispanic_latino", "restriction",
     "over_18", "relocate", "previously_employed", "under_18", "terminated",
     "relatives_at_company", "current_company_employee", "enrolled_at_company", "student",
-    "interviewed_before", "onsite_ok", "accept_acknowledgements",
+    "interviewed_before", "onsite_ok", "accept_acknowledgements", "criminal_conviction", "temporary_authorization",
   ]);
 
   const SCREENER = [
     [/\bminor\b|under (the age of )?18|younger than 18/i, "under_18"],
     [/terminated|discharged|asked to resign|ineligible for rehire|dismissed from/i, "terminated"],
     [/arbitrat|waive|class action/i, "never_auto"],
+    [/convicted|plea of .{0,3}guilty|no contest|criminal (record|offen[cs]e|conviction|history)|pending criminal charges/i, "criminal_conviction"],
     [/\brelatives?\b|family members? (who )?(work|are employed)|related to (anyone|an employee)|(personal|family) relationship with/i, "relatives_at_company"],
     [/currently (an? )?(active )?employee|active employee|currently (employed|being paid) (by|directly)/i, "current_company_employee"],
     [/currently enrolled at|current student (at|of)/i, "enrolled_at_company"],
     [/currently (enrolled|a student|pursuing)|are you a (current )?student/i, "student"],
+    [/temporary (employment|work) authori[sz]ation|\bOPT\b.{0,40}authori[sz]ation|authori[sz]ation .{0,40}\b(OPT|EAD)\b/i, "temporary_authorization"],
     [/sponsor|\bvisa\b|h-?1b/i, "requires_sponsorship"],
     [/non-?compete|restrictive covenant|bound by (any )?(agreement|contract)|restrict(s|ing)? your ability|prevent you from working/i, "restriction"],
     [/(legally )?(authori[sz]ed|eligible|permitted) to work|work authori[sz]ation|right to work/i, "authorized_us"],
     [/18 years|at least 18|age of 18|over the age|minimum (legal )?age|legal age/i, "over_18"],
     [/(interviewed|applied) (with|at|for|to) .{0,60}(before|previously|in the past)|previously (interviewed|applied)|ever (interviewed|applied)/i, "interviewed_before"],
-    [/previously (been )?(employed|worked)|ever (been )?(employed|worked) (by|for|at)|former (student|employee|affiliate|worker)|previous worker/i, "previously_employed"],
+    [/previously (been )?(employed|worked)|ever (been )?(employed|worked) (by|for|at)|have you (ever )?(worked|been employed) (at|for|with)|former (student|employee|affiliate|worker)|previous worker/i, "previously_employed"],
     [/relocat/i, "relocate"],
     [/in.?office|on.?site|in.?person|hybrid|days? (a|per|\/) ?week|commut/i, "onsite_ok"],
     [/current (or most recent )?(employer|company)|most recent (employer|company)|present employer/i, "current_employer"],
@@ -94,7 +96,7 @@
   const values = {
     over_18: true, under_18: false, restriction: false, previously_employed: false,
     terminated: false, relatives_at_company: false, current_company_employee: false,
-    enrolled_at_company: false, interviewed_before: false, onsite_ok: true, accept_acknowledgements: true, phone_type: "Mobile", ...p,
+    enrolled_at_company: false, interviewed_before: false, onsite_ok: true, accept_acknowledgements: true, criminal_conviction: false, phone_type: "Mobile", ...p,
   };
   if (!values.phone_country) values.phone_country = values.country || "United States";
   if (!values.full_name) values.full_name = [p.first_name, p.last_name].filter(Boolean).join(" ");
@@ -109,7 +111,8 @@
   const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   function visible(el) {
-    if (el.disabled || el.readOnly) return false;
+    if (el.disabled) return false;
+    if (el.readOnly && !["radio", "checkbox"].includes(el.type) && el.getAttribute("role") !== "combobox") return false;
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return false;
     const cs = getComputedStyle(el);
@@ -137,15 +140,27 @@
   function questionText(el, exclude = []) {
     const wd = fieldLabel(el);
     if (wd) return wd;
-    const fs = el.closest("fieldset");
-    if (fs) {
-      const lg = fs.querySelector("legend");
-      if (lg && clean(lg.innerText)) return clean(lg.innerText);
-    }
     const grp = el.closest('[role="radiogroup"],[role="group"]');
     if (grp) {
       const t = grp.getAttribute("aria-label") || (grp.getAttribute("aria-labelledby") && textOf(grp.getAttribute("aria-labelledby")));
       if (clean(t)) return clean(t);
+    }
+    const fs = el.closest("fieldset");
+    if (fs && [...fs.querySelectorAll("input:not([type=hidden]), select, textarea")].every((x) => x.name && x.name === el.name)) {
+      const lg = fs.querySelector("legend");
+      if (lg && clean(lg.innerText)) return clean(lg.innerText);
+    }
+    if (el.type === "radio" || el.type === "checkbox") {
+      let up = grp || el;
+      for (let i = 0; up && i < 5; i++, up = up.parentElement) {
+        const sib = up.previousElementSibling;
+        if (!sib) continue;
+        let t = sib.innerText || "";
+        for (const x of exclude) if (x) t = t.split(x).join(" ");
+        t = clean(t);
+        if (t.length > 3) return t.slice(0, 400);
+        break;
+      }
     }
     let node = el.parentElement;
     for (let i = 0; node && i < 6; i++, node = node.parentElement) {
@@ -266,6 +281,7 @@
 
   function visibleOptions(el) {
     const lb = el.getAttribute("aria-controls") || el.getAttribute("aria-owns");
+    if (lb && !document.getElementById(lb)) return [];
     const scope = (lb && document.getElementById(lb)) || document;
     return [...scope.querySelectorAll('[role="option"]')].filter(visible);
   }
@@ -275,7 +291,7 @@
       await sleep(120);
       const opts = visibleOptions(el);
       if (!opts.length) continue;
-      const pick = best(opts.map((o) => ({ el: o, text: o.innerText })), want, key);
+      const pick = bestOf(opts.map((o) => ({ el: o, text: o.innerText })), key, want);
       if (!pick) return false;
       pick.el.scrollIntoView({ block: "nearest" });
       pick.el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -304,6 +320,8 @@
     el.focus();
     el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     el.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", code: "ArrowDown", keyCode: 40, bubbles: true }));
+    if (await pickFrom(el, want, key)) return true;
+    if (el.getAttribute("aria-expanded") !== "true") el.click();
     if (await pickFrom(el, want, key)) return true;
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, want);
     el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -358,7 +376,9 @@
   }
 
   function wantsFor(key, want) {
-    const extra = key === "degree" ? degreeAliases(want) : (!values[key] && FALLBACKS[key]) || [];
+    const extra = key === "degree" ? degreeAliases(want)
+      : key === "race" ? [values.hispanic_latino ? "Hispanic or Latino" : "Not Hispanic or Latino"]
+      : (!values[key] && FALLBACKS[key]) || [];
     return [want, ...extra].filter(Boolean);
   }
 
@@ -720,7 +740,7 @@
         if (want === "Yes") { el.click(); mark(el, true); filled++; }
         continue;
       }
-      const pick = best(opts, want, key);
+      const pick = bestOf(opts, key, want);
       if (pick) { pick.el.click(); mark(pick.el, true); filled++; } else noteMissing(el, q);
       continue;
     }
@@ -739,7 +759,7 @@
       if (el.value && el.selectedIndex > 0) continue;
       if (!want) { noteMissing(el, shown); continue; }
       const opts = [...el.options].filter((o) => o.value !== "").map((o) => ({ el: o, text: o.text }));
-      const pick = best(opts, want, key);
+      const pick = bestOf(opts, key, want);
       if (pick) { setValue(el, pick.el.value); mark(el, true); filled++; } else noteMissing(el, shown);
       continue;
     }
