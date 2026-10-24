@@ -53,6 +53,11 @@ def main():
         "over_18": True,
         "restriction": False,
         "previously_employed": False,
+        "interviewed_before": False,
+        "onsite_ok": True,
+        "accept_acknowledgements": True,
+        "terminated": False,
+        "relatives_at_company": False,
     }
 
     out = {"profile": profile}
