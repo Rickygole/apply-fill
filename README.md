@@ -5,7 +5,7 @@ A Chrome extension that fills job application forms from a profile you save once
 ## What it handles
 
 - Text fields, textareas, native selects, radio groups and checkboxes, matched by label, `aria-*`, `autocomplete`, placeholder and field name
-- Greenhouse style react-select dropdowns (relocation, sponsorship, EEO questions)
+- Greenhouse style react-select dropdowns (relocation, sponsorship, EEO questions), and the Greenhouse Education section with school, degree and discipline looked up from the site list
 - Workday: Select One dropdowns, search prompts (country phone code, field of study, how did you hear), Yes/No radios, month and year date boxes
 - Workday My Experience: adds and fills one Work Experience panel per job, Education panels with degree, field of study, GPA and years, and your website links
 - Common screening questions: under 18, terminated for cause, interviewed or applied before, open to on site or hybrid work, relatives at the company, current employee or student of the company, worked there before, and the "if yes, please explain" box after the sponsorship question
@@ -76,7 +76,7 @@ Everything lives in `chrome.storage.local` on your machine. The extension makes 
 
 ## Limits
 
-- Terms and consent checkboxes are left for you on purpose.
+- Privacy notice and accuracy acknowledgements are answered yes unless you untick that in the profile. Arbitration agreements and other terms are always left for you.
 - If an entry already has text in it, the extension leaves that entry alone. Clear junk first if you want it refilled.
 - Free text questions specific to a company are left blank on purpose.
 - Dropdowns that load options from a server (school or location search) are filled by typing, which works less reliably.

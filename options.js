@@ -33,6 +33,7 @@ const SECTIONS = [
     ["relatives_at_company", "Relatives work at the company", "", "bool"],
     ["interviewed_before", "Interviewed or applied at the company before", "", "bool"],
     ["onsite_ok", "Open to working on site or hybrid", "", "bool"],
+    ["accept_acknowledgements", "Answer yes to privacy notice and accuracy acknowledgements (never arbitration)", "", "bool"],
   ]],
   ["Work experience and education", [
     ["experience", "Work experience, newest first: [{title, company, location, from: \"MM/YYYY\", to, current, description}]", "wide", "json"],
@@ -134,7 +135,7 @@ showButton.onchange = () => chrome.storage.local.set({ showButton: showButton.ch
 chrome.storage.local.get(["profile", "resume", "showButton"]).then((s) => {
   showButton.checked = s.showButton !== false;
   hadProfile = !!s.profile;
-  writeForm({ authorized_us: true, over_18: true, onsite_ok: true, ...(s.profile || {}) });
+  writeForm({ authorized_us: true, over_18: true, onsite_ok: true, accept_acknowledgements: true, ...(s.profile || {}) });
   resume = s.resume || null;
   showResume();
 });

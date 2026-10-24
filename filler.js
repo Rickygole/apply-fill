@@ -6,20 +6,21 @@
     "authorized_us", "requires_sponsorship", "hispanic_latino", "restriction",
     "over_18", "relocate", "previously_employed", "under_18", "terminated",
     "relatives_at_company", "current_company_employee", "enrolled_at_company", "student",
-    "interviewed_before", "onsite_ok",
+    "interviewed_before", "onsite_ok", "accept_acknowledgements",
   ]);
 
   const SCREENER = [
     [/\bminor\b|under (the age of )?18|younger than 18/i, "under_18"],
     [/terminated|discharged|asked to resign|ineligible for rehire|dismissed from/i, "terminated"],
-    [/\brelatives?\b|family members? (who )?(work|are employed)|related to (anyone|an employee)/i, "relatives_at_company"],
+    [/arbitrat|waive|class action/i, "never_auto"],
+    [/\brelatives?\b|family members? (who )?(work|are employed)|related to (anyone|an employee)|(personal|family) relationship with/i, "relatives_at_company"],
     [/currently (an? )?(active )?employee|active employee|currently (employed|being paid) (by|directly)/i, "current_company_employee"],
     [/currently enrolled at|current student (at|of)/i, "enrolled_at_company"],
     [/currently (enrolled|a student|pursuing)|are you a (current )?student/i, "student"],
     [/sponsor|\bvisa\b|h-?1b/i, "requires_sponsorship"],
     [/non-?compete|restrictive covenant|bound by (any )?(agreement|contract)|restrict(s|ing)? your ability|prevent you from working/i, "restriction"],
     [/(legally )?(authori[sz]ed|eligible|permitted) to work|work authori[sz]ation|right to work/i, "authorized_us"],
-    [/18 years|at least 18|age of 18|over the age/i, "over_18"],
+    [/18 years|at least 18|age of 18|over the age|minimum (legal )?age|legal age/i, "over_18"],
     [/(interviewed|applied) (with|at|for|to) .{0,60}(before|previously|in the past)|previously (interviewed|applied)|ever (interviewed|applied)/i, "interviewed_before"],
     [/previously (been )?(employed|worked)|ever (been )?(employed|worked) (by|for|at)|former (student|employee|affiliate|worker)|previous worker/i, "previously_employed"],
     [/relocat/i, "relocate"],
@@ -39,6 +40,7 @@
     [/how did you (hear|find|learn)|where did you (hear|find)|referral source/i, "referral_source"],
     [/phone (device )?type|type of phone/i, "phone_type"],
     [/phone code|country code|dialing code/i, "phone_country"],
+    [/privacy (notice|policy|terms|statement)|candidate privacy|application accuracy|accuracy and completeness|information (provided )?(is )?(true|accurate|complete)|i certify|certification of|acknowledg/i, "accept_acknowledgements"],
     [/why .*(interested|want to|join|apply)|what (excites|interests) you/i, "why_interested"],
   ];
 
@@ -92,7 +94,7 @@
   const values = {
     over_18: true, under_18: false, restriction: false, previously_employed: false,
     terminated: false, relatives_at_company: false, current_company_employee: false,
-    enrolled_at_company: false, interviewed_before: false, onsite_ok: true, phone_type: "Mobile", ...p,
+    enrolled_at_company: false, interviewed_before: false, onsite_ok: true, accept_acknowledgements: true, phone_type: "Mobile", ...p,
   };
   if (!values.phone_country) values.phone_country = values.country || "United States";
   if (!values.full_name) values.full_name = [p.first_name, p.last_name].filter(Boolean).join(" ");
@@ -289,7 +291,7 @@
     try { labels = JSON.parse(el.getAttribute("data-applyfill-options") || "[]"); } catch {}
     el.removeAttribute("data-applyfill-options");
     if (!labels.length) return null;
-    const pick = best(labels.map((text, i) => ({ el: i, text })), want, key);
+    const pick = bestOf(labels.map((text, i) => ({ el: i, text })), key, want);
     if (!pick) return false;
     el.setAttribute("data-applyfill-choose", String(pick.el));
     el.dispatchEvent(new CustomEvent("applyfill:choose", { bubbles: true }));
@@ -314,7 +316,7 @@
   }
 
   const FALLBACKS = {
-    referral_source: ["Company Website", "Careers Website", "Career Site", "Website", "Internet", "Job Board", "Other"],
+    referral_source: ["Company Careers Page", "Company Website", "Careers Website", "Career Site", "Website", "LinkedIn", "Job Board", "Internet", "Other"],
   };
 
   function keySeq(el, key, code, keyCode) {
@@ -361,11 +363,16 @@
   }
 
   function bestOf(opts, key, want) {
+    let top = null;
+    let topScore = 39;
     for (const w of wantsFor(key, want)) {
-      const pick = best(opts, w, key);
-      if (pick) return pick;
+      for (const o of opts) {
+        const sc = score(o.text, w, key);
+        if (sc > topScore) { top = o; topScore = sc; }
+      }
+      if (topScore >= 100) break;
     }
-    return null;
+    return top;
   }
 
   const isPlaceholder = (t) => !t || /^(select( one)?|choose( one)?|please select|--)/i.test(t);
@@ -584,12 +591,96 @@
     }
   }
 
+  async function searchCombobox(el, queries, key, want, alt) {
+    for (const q of queries) {
+      if (q == null) continue;
+      el.setAttribute("data-applyfill-query", q);
+      el.dispatchEvent(new CustomEvent("applyfill:search", { bubbles: true }));
+      let labels = null;
+      for (let t = 0; t < 40 && !labels; t++) {
+        await sleep(100);
+        const raw = el.getAttribute("data-applyfill-found");
+        if (raw) labels = JSON.parse(raw);
+      }
+      el.removeAttribute("data-applyfill-found");
+      if (!labels || !labels.length) continue;
+      const opts = labels.map((text, i) => ({ el: i, text }));
+      const pick = bestOf(opts, key, want) || (alt && bestOf(opts, key, alt)) || (key === "discipline" || key === "school" ? bestOverlap(opts, alt || want) : null);
+      if (!pick) continue;
+      el.setAttribute("data-applyfill-choose", String(pick.el));
+      el.dispatchEvent(new CustomEvent("applyfill:choose-found", { bubbles: true }));
+      return true;
+    }
+    return false;
+  }
+
+  function bestOverlap(opts, want) {
+    const wt = new Set(tokens(want).filter((t) => !/^(university|college|institute|school|the|of|and|at)$/.test(t)));
+    let top = null;
+    let topHit = 0;
+    for (const o of opts) {
+      const hit = tokens(o.text).filter((t) => wt.has(t)).length;
+      if (hit > topHit) { top = o; topHit = hit; }
+    }
+    return top;
+  }
+
+  const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+  function splitDate(v) {
+    const m = String(v || "").match(/^(\d{1,2})\/(\d{4})$/);
+    if (m) return { month: MONTHS[Number(m[1]) - 1], year: m[2] };
+    const y = String(v || "").match(/\d{4}/);
+    return { month: null, year: y ? y[0] : null };
+  }
+
+  async function fillGreenhouseEducation(entries) {
+    if (!Array.isArray(entries) || !entries.length || !document.getElementById("school--0")) return;
+    for (let i = 0; i < entries.length; i++) {
+      let school = document.getElementById(`school--${i}`);
+      if (!school) {
+        const add = [...document.querySelectorAll("button, a")].filter(visible)
+          .find((b) => /^add another$/i.test(clean(b.innerText)) && b.closest("fieldset, div")?.querySelector('[id^="school--"]'));
+        if (!add) break;
+        add.click();
+        school = await waitFor(() => document.getElementById(`school--${i}`), 2000);
+        if (!school) break;
+      }
+      const e = entries[i];
+      const shown = (id) => clean(document.getElementById(id)?.closest('[class*="select__control"]')?.querySelector('[class*="single-value"]')?.innerText || "");
+      if (shown(`school--${i}`)) continue;
+      const words = (s) => clean(s).split(" ").filter((w) => w.length > 3);
+      const steps = [
+        [`school--${i}`, "school", e.school, [e.school, words(e.school).slice(0, 2).join(" "), words(e.school)[0]]],
+        [`degree--${i}`, "degree", e.degree, ["", e.degree]],
+        [`discipline--${i}`, "discipline", e.field, [e.field, e.field_alt, ...words(e.field), ...words(e.field_alt)], e.field_alt],
+      ];
+      for (const [id, key, want, queries, alt] of steps) {
+        const el = document.getElementById(id);
+        if (!el || !want || shown(id)) continue;
+        done.add(el);
+        if (await searchCombobox(el, [...new Set(queries.filter((q) => q != null))], key, want, alt)) { mark(el, true); filled++; } else noteMissing(el, key);
+        await sleep(200);
+      }
+      for (const [side, v] of [["start", e.from], ["end", e.current ? null : e.to]]) {
+        const { month, year } = splitDate(v);
+        const mEl = document.getElementById(`${side}-month--${i}`);
+        const yEl = document.getElementById(`${side}-year--${i}`);
+        if (mEl) done.add(mEl);
+        if (yEl) done.add(yEl);
+        if (month && mEl && !shown(mEl.id) && viaBridge(mEl, month, null)) { mark(mEl, true); filled++; }
+        if (year && yEl && !yEl.value) { setValue(yEl, year); mark(yEl, true); filled++; }
+      }
+    }
+  }
+
   const isWorkday = /myworkday|workday/i.test(location.hostname) || !!document.querySelector('[data-automation-id^="formField-"]');
   if (isWorkday) {
     await fillEntries("Work Experience", /^job title/i, /school|university/i, WORK_FIELDS, values.experience, /currently work|i currently/i);
     await fillEntries("Education", /^(school|university|school or university)/i, /^job title/i, EDU_FIELDS, values.education, null);
     await fillWebsites([values.linkedin, values.github, values.website, values.scholar].filter(Boolean));
   }
+  await fillGreenhouseEducation(values.education);
 
   for (let pass = 0; pass < 3; pass++) {
   if (pass) await sleep(500);
@@ -604,6 +695,8 @@
     if (!visible(el)) continue;
     if (el.closest('[data-automation-id="multiselectInputContainer"]')) continue;
     if (/^dateSection/.test(el.getAttribute("data-automation-id") || "")) continue;
+    if (el.getAttribute("aria-hidden") === "true" && el.tabIndex < 0) continue;
+    if (/^(school|degree|discipline|start-month|start-year|end-month|end-year)--\d+$/.test(el.id)) continue;
 
     if (type === "radio" || type === "checkbox") {
       const group = el.name
@@ -639,7 +732,7 @@
     const key = /^if (yes|so)\b.*(explain|describe|provide|detail|specify)/i.test(q0)
       ? FOLLOWUP[previousQuestionKey(el)] || null
       : keyFor(label || (fallbackQ.length <= 200 ? fallbackQ : ""), nameHints(el), el);
-    const want = key && wanted(key);
+    const want = key && (wanted(key) || (FALLBACKS[key] && FALLBACKS[key][0]));
     const shown = label || fallbackQ || nameHints(el);
 
     if (el.tagName === "SELECT") {
